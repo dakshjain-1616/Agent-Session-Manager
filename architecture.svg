@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400" width="800" height="400" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif">
+
+  <!-- Background -->
+  <rect width="800" height="400" rx="12" ry="12" fill="#E8F4FD"/>
+
+  <!-- Title -->
+  <text x="400" y="42" text-anchor="middle" font-size="22" font-weight="700" fill="#2C3E50">Agent Session Manager</text>
+  <text x="400" y="64" text-anchor="middle" font-size="12" fill="#5D6D7E">Architecture Overview</text>
+
+  <!-- ── Storage layer label ── -->
+  <text x="400" y="100" text-anchor="middle" font-size="11" font-weight="600" fill="#5D6D7E" letter-spacing="1">STORAGE BACKENDS</text>
+
+  <!-- SQLitePersistence box -->
+  <rect x="60" y="112" width="210" height="94" rx="8" ry="8" fill="#4A90E2" opacity="0.15" stroke="#4A90E2" stroke-width="2"/>
+  <rect x="60" y="112" width="210" height="30" rx="8" ry="8" fill="#4A90E2"/>
+  <!-- bottom-corner fix for header -->
+  <rect x="60" y="132" width="210" height="10" fill="#4A90E2"/>
+  <text x="165" y="132" text-anchor="middle" font-size="13" font-weight="700" fill="#FFFFFF">SQLitePersistence</text>
+  <text x="165" y="158" text-anchor="middle" font-size="11" fill="#2C3E50">• Session CRUD</text>
+  <text x="165" y="174" text-anchor="middle" font-size="11" fill="#2C3E50">• Step tracking</text>
+  <text x="165" y="190" text-anchor="middle" font-size="11" fill="#2C3E50">• Key-value store</text>
+
+  <!-- ChromaDBMemory box -->
+  <rect x="530" y="112" width="210" height="94" rx="8" ry="8" fill="#4A90E2" opacity="0.15" stroke="#4A90E2" stroke-width="2"/>
+  <rect x="530" y="112" width="210" height="30" rx="8" ry="8" fill="#4A90E2"/>
+  <rect x="530" y="132" width="210" height="10" fill="#4A90E2"/>
+  <text x="635" y="132" text-anchor="middle" font-size="13" font-weight="700" fill="#FFFFFF">ChromaDBMemory</text>
+  <text x="635" y="158" text-anchor="middle" font-size="11" fill="#2C3E50">• Semantic embeddings</text>
+  <text x="635" y="174" text-anchor="middle" font-size="11" fill="#2C3E50">• Similarity search</text>
+  <text x="635" y="190" text-anchor="middle" font-size="11" fill="#2C3E50">• Session-scoped docs</text>
+
+  <!-- Arrows: storage → SessionManager (upward into SessionManager box) -->
+  <!-- Left arrow: SQLite → SessionManager -->
+  <line x1="270" y1="206" x2="320" y2="240" stroke="#4A90E2" stroke-width="2" stroke-dasharray="5,3" marker-end="url(#arrow)"/>
+  <!-- Right arrow: ChromaDB → SessionManager -->
+  <line x1="530" y1="206" x2="480" y2="240" stroke="#4A90E2" stroke-width="2" stroke-dasharray="5,3" marker-end="url(#arrow)"/>
+
+  <!-- ── Orchestration layer label ── -->
+  <text x="400" y="234" text-anchor="middle" font-size="11" font-weight="600" fill="#5D6D7E" letter-spacing="1">ORCHESTRATION</text>
+
+  <!-- SessionManager box -->
+  <rect x="260" y="244" width="280" height="104" rx="8" ry="8" fill="#4A90E2" opacity="0.15" stroke="#4A90E2" stroke-width="2.5"/>
+  <rect x="260" y="244" width="280" height="32" rx="8" ry="8" fill="#4A90E2"/>
+  <rect x="260" y="264" width="280" height="12" fill="#4A90E2"/>
+  <text x="400" y="266" text-anchor="middle" font-size="14" font-weight="700" fill="#FFFFFF">SessionManager</text>
+  <text x="400" y="291" text-anchor="middle" font-size="11" fill="#2C3E50">create_session() · load_session() · save_state()</text>
+  <text x="400" y="307" text-anchor="middle" font-size="11" fill="#2C3E50">add_step() · recall_context() · check_budget()</text>
+  <text x="400" y="323" text-anchor="middle" font-size="11" fill="#2C3E50">recall_across_agents() · list_sessions() · delete_session()</text>
+
+  <!-- Arrow: SessionManager → AgentState -->
+  <line x1="400" y1="348" x2="400" y2="368" stroke="#2C3E50" stroke-width="2" marker-end="url(#arrowDark)"/>
+
+  <!-- ── Output label ── -->
+  <!-- AgentState box -->
+  <rect x="270" y="368" width="260" height="24" rx="6" ry="6" fill="#2C3E50" opacity="0.08" stroke="#2C3E50" stroke-width="1.5"/>
+  <text x="400" y="384" text-anchor="middle" font-size="12" font-weight="600" fill="#2C3E50">AgentState  (dataclass returned to caller)</text>
+
+  <!-- Tech-stack footer -->
+  <text x="400" y="400" text-anchor="middle" font-size="10" fill="#7F8C8D">SQLite · ChromaDB · sentence-transformers (all-MiniLM-L6-v2) · tiktoken</text>
+
+  <!-- Arrow marker definitions -->
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#4A90E2"/>
+    </marker>
+    <marker id="arrowDark" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#2C3E50"/>
+    </marker>
+  </defs>
+
+</svg>
