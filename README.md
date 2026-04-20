@@ -4,395 +4,62 @@
 >
 > [![VS Code Extension](https://img.shields.io/badge/VS%20Code-NEO%20Extension-blue?logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=NeoResearchInc.heyneo)  [![Cursor Extension](https://img.shields.io/badge/Cursor-NEO%20Extension-purple?logo=cursor)](https://marketplace.cursorapi.com/items/?itemName=NeoResearchInc.heyneo)
 
-A lightweight Python library that persists agent state across sessions using SQLite and a local ChromaDB vector store. Enables semantic recall, context budget management, and multi-agent support — all without cloud dependencies.
-
-## Architecture
+A lightweight Python library that gives your agents durable memory. Sessions, decisions, tool outputs, and error history persist across runs — restored in under five seconds, with no cloud dependency and no API keys.
 
 ![Architecture](architecture.svg)
 
-## Features
-
-- **🔄 State Persistence** — Store and restore agent sessions with goals, steps, errors, and arbitrary metadata using SQLite
-- **🧠 Semantic Recall** — Retrieve past decisions by meaning using local ChromaDB embeddings + sentence-transformers
-- **📏 Context Budget Guard** — Intelligently trim context to stay within token limits, prioritizing recent and relevant items
-- **👥 Multi-Agent Support** — Multiple agents can share sessions and see each other's decisions
-- **⚡ Fast Restore** — Full context restored in under 5 seconds
-- **🔒 Local-Only** — No cloud APIs or external dependencies required
+## The Problem
 
-## Installation
+The single biggest pain in production agents is that large language models have no memory of their own. Close the process, restart the script, or hit a token limit mid-run and everything the agent worked out — the plan it formed, the constraints it discovered, the tools it already called, the mistakes it already corrected — vanishes. The next run starts from zero.
 
-```bash
-pip install chromadb sentence-transformers tiktoken
-```
+Teams paper over this in three ways, and all three break:
 
-Or install from requirements:
+1. **Stuff everything back into the prompt.** Works until the context window fills up. Then the agent starts forgetting the beginning of its own conversation and the cost of every call balloons.
+2. **Write custom JSON files per project.** Works for a weekend. By the time you have multiple agents, revision history, and tool output caching, you have reinvented a database badly.
+3. **Reach for a hosted "agent memory" SaaS.** Adds a dependency, a bill, and a network round-trip to the critical path — plus you have now shipped your agent's state to a third party.
 
-```bash
-pip install -r requirements.txt
-```
+This library is what sits underneath an agent when none of those three options are acceptable.
 
-## Quick Start
+## What It Gives You
 
-```python
-from agent_session_manager import SessionManager
+**State persistence.** Every session has a goal, a list of completed steps with their results, a queue of pending steps, an error history, a cache of tool outputs, and arbitrary metadata. All of it is stored in a local SQLite database, so a single file captures the full state of every agent run you have ever done.
 
-# Initialize the manager
-manager = SessionManager(
-    db_path="./sessions.db",
-    chroma_persist_dir="./chroma_db"
-)
+**Semantic recall.** The agent can ask "what did we decide about the auth module" and get back the relevant past context — not by exact-key lookup but by meaning, using local sentence-transformer embeddings indexed in a local ChromaDB store. Past decisions stop disappearing into a log nobody reads.
 
-# Create a new session
-state = manager.create_session(
-    session_id="session-001",
-    agent_id="my-agent",
-    initial_goal="Build a chatbot",
-    metadata={"project": "demo"}
-)
+**Context budget enforcement.** When you restore a long-running session into a fresh prompt, the library trims intelligently: it keeps the goal, the most recent steps, and the items the semantic layer flags as relevant, dropping older low-value history until you are under the token ceiling you specified. The agent gets the context that matters without blowing its window.
 
-# Add workflow steps
-manager.add_step(
-    session_id="session-001",
-    action="Initialize model",
-    result="GPT-4 loaded successfully"
-)
+**Multi-agent support.** Several agents can share a session and see each other's decisions, or keep their memories isolated, or selectively recall across agents — a research agent can look up what the code agent decided without either leaking their full state.
 
-# Save state
-manager.save_state(state)
+**No cloud, no keys.** SQLite and ChromaDB run locally. The embedding model runs locally. Your agent state stays on your machine.
 
-# Later, restore the session
-restored = manager.load_session("session-001")
-print(f"Goal: {restored.current_goal}")
-print(f"Steps: {len(restored.completed_steps)}")
+## Why This Shape
 
-# Semantic recall
-results = manager.recall_context(
-    query="What model was loaded?",
-    session_id="session-001",
-    n_results=3
-)
+Every design choice here exists to make the library drop-in for an existing agent. There is no orchestration layer to rewrite around. The `SessionManager` is a plain Python object that you instantiate once and call from inside whatever agent loop you already have. State shape is a dataclass, not a framework abstraction — so the same library fits a LangChain agent, a LlamaIndex workflow, a raw API loop, or anything else.
 
-# Cleanup
-manager.close()
-```
+The SQLite layer handles structured facts (what happened, when, with what result). The ChromaDB layer handles fuzzy retrieval (what does this situation remind me of). Splitting those two concerns means the library answers both "give me the last five tool calls" and "have we seen something like this before" without one subsystem distorting the other.
 
-## API Documentation
+The five-second restore target is not arbitrary. It is the threshold below which developers stop working around the system. Anything slower and people start caching things themselves, and then you have the scattered-JSON problem all over again.
 
-### SessionManager
+## When to Reach For It
 
-The main class for managing agent sessions.
+You want this library if your agent runs for more than one invocation — if it resumes work the next morning, picks up after a crash, hands off to a sibling agent, or just needs to avoid re-deriving facts it already knows. You do **not** need this library for a stateless one-shot script that answers a single question and exits.
 
-#### Constructor
+It is also a good fit for evaluation harnesses and benchmarks, where you want to inspect exactly what an agent did after the run is over.
 
-```python
-SessionManager(
-    db_path: str = "agent_sessions.db",
-    chroma_persist_dir: str = "./chroma_db",
-    collection_name: str = "agent_memory",
-    embedding_model: str = "all-MiniLM-L6-v2",
-    default_context_budget: int = 4000,
-    tokenizer_model: str = "cl100k_base"
-)
-```
+## Running It
 
-**Parameters:**
-- `db_path` — Path to SQLite database file
-- `chroma_persist_dir` — Directory for ChromaDB persistence
-- `collection_name` — Name of the ChromaDB collection
-- `embedding_model` — Sentence-transformers model for embeddings
-- `default_context_budget` — Default token budget for context
-- `tokenizer_model` — Tiktoken model for token counting
+Install the dependencies from `requirements.txt`, point the `SessionManager` at a directory for its SQLite and ChromaDB files, and call `create_session` / `load_session` / `add_step` / `recall_context` from inside your agent.
 
-#### Methods
+Three example scripts in the repository walk through the typical use cases end to end:
 
-##### `create_session(session_id, agent_id, initial_goal=None, metadata=None)`
-
-Create a new agent session.
-
-**Returns:** `AgentState` object
-
-##### `load_session(session_id, context_budget=None)`
-
-Load a session with optional context trimming.
-
-**Returns:** `AgentState` with trimmed context
-
-##### `save_state(state, persist_to_memory=True)`
-
-Save agent state to persistence.
-
-##### `add_step(session_id, action, result=None, metadata=None, index_in_memory=True)`
-
-Add a step to a session.
-
-**Returns:** Step number assigned
-
-##### `recall_context(query, session_id=None, n_results=5, filter_dict=None)`
-
-Search for semantically relevant past context.
-
-**Returns:** List of relevant context items
-
-##### `recall_across_agents(query, agent_ids=None, n_results=5)`
-
-Search for context across multiple agents.
-
-##### `list_sessions(agent_id=None, status=None)`
-
-List all sessions with optional filtering.
-
-##### `delete_session(session_id)`
-
-Delete a session and all associated data.
-
-##### `check_budget(state, budget=None)`
-
-Check current context usage against budget.
-
-**Returns:** Dict with `tokens`, `budget`, `usage_percent`, `remaining`, `within_budget`
-
-### AgentState
-
-Dataclass representing agent session state.
-
-```python
-@dataclass
-class AgentState:
-    session_id: str
-    agent_id: str
-    current_goal: Optional[str] = None
-    completed_steps: List[Dict[str, Any]] = None
-    pending_steps: List[str] = None
-    error_history: List[Dict[str, Any]] = None
-    tool_outputs: Dict[str, Any] = None
-    metadata: Dict[str, Any] = None
-```
-
-## Examples
-
-### Basic Usage
-
-See `examples/basic_usage.py` for a complete example demonstrating:
-- Session creation and persistence
-- Adding workflow steps
-- Session restoration across script runs
-- Semantic recall for context retrieval
-
-```bash
-python examples/basic_usage.py
-```
-
-### Multi-Agent Support
-
-See `examples/multi_agent.py` for a complete example demonstrating:
-- Multiple agents with isolated sessions
-- Cross-agent context sharing
-- Agent-specific memory retrieval
-- Context budget enforcement per agent
-
-```bash
-python examples/multi_agent.py
-```
-
-### Full Demo
-
-Run the root `demo.py` to see all features in action:
-
-```bash
-python demo.py
-```
-
-This demonstrates:
-1. State persistence across sessions
-2. Semantic recall using ChromaDB
-3. Context budget management with trimming
-4. Multi-agent support
-5. Performance verification (<5s restore)
-6. Cloud dependency verification
-
-## Context Budget Management
-
-The library intelligently manages context size to stay within token budgets:
-
-```python
-# Load with default budget
-state = manager.load_session("session-001")
-
-# Load with custom budget (trims if necessary)
-state = manager.load_session("session-001", context_budget=1000)
-
-# Check budget usage
-budget_info = manager.check_budget(state)
-print(f"Usage: {budget_info['usage_percent']:.1f}%")
-```
-
-**Trimming Strategy:**
-1. Always keep most recent steps
-2. Remove older steps if over budget
-3. Keep essential metadata and current goal
-
-## Multi-Agent Support
-
-Multiple agents can work independently or share context:
-
-```python
-# Create sessions for different agents
-manager.create_session("session-a", agent_id="research-agent", ...)
-manager.create_session("session-b", agent_id="code-agent", ...)
-
-# Agent-specific recall
-results = manager.recall_context(
-    query="What was implemented?",
-    session_id="session-b"  # Only code-agent's context
-)
-
-# Cross-agent search
-results = manager.recall_across_agents(
-    query="deployment",
-    agent_ids=["research-agent", "code-agent"]
-)
-```
-
-## Configuration
-
-### Context Budgets
-
-Set default budget in constructor:
-
-```python
-manager = SessionManager(default_context_budget=2000)
-```
-
-Override per session load:
-
-```python
-state = manager.load_session("session-001", context_budget=500)
-```
-
-### Embedding Models
-
-Use a different sentence-transformers model:
-
-```python
-manager = SessionManager(
-    embedding_model="all-mpnet-base-v2"  # Higher quality, slower
-)
-```
-
-Available models: [sentence-transformers documentation](https://www.sbert.net/docs/pretrained_models.html)
-
-### Storage Locations
-
-```python
-manager = SessionManager(
-    db_path="/path/to/custom.db",
-    chroma_persist_dir="/path/to/chroma"
-)
-```
+- `examples/basic_usage.py` — single agent, persistence across runs, semantic recall
+- `examples/multi_agent.py` — multiple agents sharing and isolating context
+- `demo.py` — full feature tour including context-budget trimming
 
 ## Tech Stack
 
-- **Python 3.10+**
-- **SQLite** — State persistence (stdlib `sqlite3`)
-- **ChromaDB** — Vector storage for semantic search (local mode)
-- **sentence-transformers** — Local embeddings (`all-MiniLM-L6-v2` default)
-- **tiktoken** — Token counting for context budgets
-
-## Architecture
-
-```
-┌─────────────────┐
-│  SessionManager │
-├─────────────────┤
-│  - create_session()
-│  - load_session()
-│  - save_state()
-│  - recall_context()
-└────────┬────────┘
-         │
-    ┌────┴────┐
-    │         │
-┌───▼───┐  ┌──▼────┐
-│SQLite │  │ChromaDB│
-│Store  │  │Memory  │
-└───────┘  └────────┘
-```
-
-- **SQLite** stores structured state: sessions, steps, key-value pairs
-- **ChromaDB** stores semantic embeddings for recall
-- **SessionManager** orchestrates both with context budgeting
-
-## Error Handling
-
-The library provides specific exceptions:
-
-```python
-from agent_session_manager import (
-    SessionManager,
-    SessionNotFoundError,
-    SessionManagerError,
-    BudgetExceededError
-)
-
-try:
-    state = manager.load_session("nonexistent")
-except SessionNotFoundError:
-    print("Session not found")
-    
-try:
-    state = manager.create_session("existing-id", "agent")
-except SessionManagerError as e:
-    print(f"Session error: {e}")
-```
-
-## Performance
-
-- **Session creation**: <100ms
-- **State restore**: <5s (even with large histories)
-- **Semantic search**: <500ms for 1000 documents
-- **Memory usage**: ~100MB base + model size
-
-## Development
-
-### Running Tests
-
-```bash
-# Test persistence layer
-python -c "from agent_session_manager.persistence import test_persistence; test_persistence()"
-
-# Test memory layer
-python -c "from agent_session_manager.memory import test_memory; test_memory()"
-
-# Test manager
-python -c "from agent_session_manager.manager import test_session_manager; test_session_manager()"
-```
-
-### Project Structure
-
-```
-agent_session_manager/
-├── __init__.py          # Package exports
-├── persistence.py       # SQLite persistence layer
-├── memory.py           # ChromaDB semantic memory
-└── manager.py          # Core SessionManager
-
-examples/
-├── basic_usage.py      # Basic usage example
-└── multi_agent.py      # Multi-agent example
-
-demo.py                 # End-to-end demo
-requirements.txt        # Dependencies
-README.md              # This file
-```
+Python 3.10+, SQLite via the standard library, ChromaDB for the vector store, `sentence-transformers` for local embeddings (default model `all-MiniLM-L6-v2` — small, fast, good enough for recall), and `tiktoken` for token accounting.
 
 ## License
 
-MIT License
-
-## Contributing
-
-Contributions welcome! Please ensure:
-- Code follows existing style
-- Tests pass
-- Documentation is updated
-- No cloud dependencies are introduced
+MIT.
